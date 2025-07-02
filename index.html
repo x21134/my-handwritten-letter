@@ -2,22 +2,22 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>親筆信 AI 轉寫與手寫生成</title>
+  <title>親筆信 AI 轉寫與手寫覆蓋圖片（含韓文）</title>
   <style>
     body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; }
-    #preview { max-width: 100%; margin-top: 10px; }
+    #preview { max-width: 100%; margin-top: 10px; display:none; }
     #handwritingCanvas { border: 1px solid #ccc; margin-top: 20px; }
     #resultText { white-space: pre-wrap; background: #f9f9f9; padding: 10px; border: 1px solid #ddd; margin-top: 10px; }
     button { margin-top: 10px; }
   </style>
 </head>
 <body>
-  <h1>親筆信 AI 轉寫與手寫生成</h1>
+  <h1>親筆信 AI 轉寫與手寫覆蓋圖片（含韓文）</h1>
 
   <label>拍照或上傳親筆信圖片：</label><br />
   <input type="file" id="imgInp" accept="image/*" capture="environment" />
   <br />
-  <img id="preview" alt="圖片預覽" style="display:none;" />
+  <img id="preview" alt="圖片預覽" />
   <br />
 
   <label>選擇翻譯目標語言：</label>
@@ -25,22 +25,21 @@
     <option value="en">英文</option>
     <option value="zh-Hant">繁體中文</option>
     <option value="ja">日文</option>
-    <option value="ko">韓文</option> <!-- 新增韓文 -->
+    <option value="ko">韓文</option>
     <option value="fr">法文</option>
     <option value="es">西班牙文</option>
   </select>
   <br /><br />
 
   <button id="processBtn">開始轉寫與翻譯</button>
-  <button id="downloadBtn" disabled>下載手寫圖片</button>
+  <button id="downloadBtn" disabled>下載合成圖片</button>
 
   <h3>辨識文字（OCR）結果：</h3>
   <pre id="resultText">尚未辨識</pre>
 
-  <h3>手寫風格生成圖片：</h3>
-  <canvas id="handwritingCanvas" width="800" height="400"></canvas>
+  <h3>合成圖片預覽：</h3>
+  <canvas id="handwritingCanvas"></canvas>
 
-  <!-- 引入 Tesseract.js -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
 
   <script>
@@ -53,7 +52,9 @@
     const canvas = document.getElementById('handwritingCanvas');
     const ctx = canvas.getContext('2d');
 
-    // 圖片上傳後顯示預覽
+    let loadedImage = null;
+
+    // 圖片上傳後顯示預覽並儲存 Image 物件
     imgInp.addEventListener('change', e => {
       const file = e.target.files[0];
       if (!file) return;
@@ -61,27 +62,39 @@
       reader.onload = function(evt) {
         preview.src = evt.target.result;
         preview.style.display = 'block';
+
+        // 建立 Image 物件，等候載入完成後才能繪製到 Canvas
+        loadedImage = new Image();
+        loadedImage.onload = () => {
+          // 設定 Canvas 尺寸與圖片相同
+          canvas.width = loadedImage.width;
+          canvas.height = loadedImage.height;
+          clearCanvas();
+          ctx.drawImage(loadedImage, 0, 0);
+        };
+        loadedImage.src = evt.target.result;
       };
       reader.readAsDataURL(file);
-      // 每次換圖，禁用下載按鈕直到重新生成圖片
       downloadBtn.disabled = true;
     });
 
-    // 手寫字體設定，包含韓文字體
-    const handwritingFont = "30px 'Segoe Script', 'Comic Sans MS', cursive, 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo'";
-
-    // 清除 Canvas 並填白底
+    // 清除 Canvas
     function clearCanvas() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    // 在 Canvas 上用手寫風格字體繪製文字，簡單換行
-    function drawHandwriting(text) {
-      clearCanvas();
-      ctx.fillStyle = "#222";
-      ctx.font = handwritingFont;
+    // 在 Canvas 上疊加手寫風格文字，簡單換行
+    function drawHandwritingOverImage(text) {
+      if (!loadedImage) return;
+      // 先畫原圖
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(loadedImage, 0, 0);
+
+      // 文字樣式設定（可調整）
+      ctx.fillStyle = "rgba(0,0,0,0.8)";
+      ctx.font = "30px 'Segoe Script', 'Comic Sans MS', cursive, 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo'";
       ctx.textBaseline = "top";
 
       const maxWidth = canvas.width - 40;
@@ -116,7 +129,7 @@
         const data = await res.json();
         return data.responseData.translatedText;
       } catch (e) {
-        return text; // 失敗就回傳原文
+        return text; // 失敗回傳原文
       }
     }
 
@@ -126,8 +139,11 @@
         alert("請先上傳圖片");
         return;
       }
+      if (!loadedImage) {
+        alert("圖片尚未載入完成，請稍候");
+        return;
+      }
       resultText.textContent = "辨識中，請稍候...";
-      clearCanvas();
       downloadBtn.disabled = true;
 
       const file = imgInp.files[0];
@@ -140,16 +156,16 @@
 
         // 翻譯
         const target = targetLang.value;
+        let finalText = text.trim();
         if (target !== 'auto' && target !== 'eng') {
-          const translated = await translateText(text.trim(), target);
+          const translated = await translateText(finalText, target);
           resultText.textContent += `\n\n翻譯結果 (${target}):\n` + translated;
-
-          // 生成手寫圖片
-          drawHandwriting(translated);
-        } else {
-          // 不翻譯直接生成
-          drawHandwriting(text.trim());
+          finalText = translated;
         }
+
+        // 在圖片上疊加文字
+        drawHandwritingOverImage(finalText);
+
         // 啟用下載按鈕
         downloadBtn.disabled = false;
       } catch (err) {
@@ -157,12 +173,12 @@
       }
     });
 
-    // 下載圖片按鈕事件
+    // 下載合成圖片按鈕事件
     downloadBtn.addEventListener('click', () => {
       const imageURL = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = imageURL;
-      link.download = '親筆信_手寫圖片.png';
+      link.download = '親筆信_合成圖片.png';
       link.click();
     });
   </script>
