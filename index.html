@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>親筆信 AI 轉寫與手寫生成（含韓文）</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; }
+    #preview { max-width: 100%; margin-top: 10px; }
+    #handwritingCanvas { border: 1px solid #ccc; margin-top: 20px; }
+    #resultText { white-space: pre-wrap; background: #f9f9f9; padding: 10px; border: 1px solid #ddd; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>親筆信 AI 轉寫與手寫生成（含韓文）</h1>
+
+  <label>拍照或上傳親筆信圖片：</label><br />
+  <input type="file" id="imgInp" accept="image/*" capture="environment" />
+  <br />
+  <img id="preview" alt="圖片預覽" style="display:none;" />
+  <br />
+
+  <label>選擇翻譯目標語言：</label>
+  <select id="targetLang">
+    <option value="en">英文</option>
+    <option value="zh-Hant">繁體中文</option>
+    <option value="ja">日文</option>
+    <option value="ko">韓文</option> <!-- 新增韓文 -->
+    <option value="fr">法文</option>
+    <option value="es">西班牙文</option>
+  </select>
+  <br /><br />
+
+  <button id="processBtn">開始轉寫與翻譯</button>
+
+  <h3>辨識文字（OCR）結果：</h3>
+  <pre id="resultText">尚未辨識</pre>
+
+  <h3>手寫風格生成圖片：</h3>
+  <canvas id="handwritingCanvas" width="800" height="400"></canvas>
+
+  <!-- 引入 Tesseract.js -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+
+  <script>
+    const imgInp = document.getElementById('imgInp');
+    const preview = document.getElementById('preview');
+    const resultText = document.getElementById('resultText');
+    const targetLang = document.getElementById('targetLang');
+    const processBtn = document.getElementById('processBtn');
+    const canvas = document.getElementById('handwritingCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // 圖片上傳後顯示預覽
+    imgInp.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        preview.src = evt.target.result;
+        preview.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // 簡易手寫風格字體設定，系統字體包含韓文字體
+    const handwritingFont = "30px 'Segoe Script', 'Comic Sans MS', cursive, 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo'";
+
+    // 清除 Canvas
+    function clearCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // 在 Canvas 上用手寫風格字體繪製文字
+    function drawHandwriting(text) {
+      clearCanvas();
+      ctx.fillStyle = "#222";
+      ctx.font = handwritingFont;
+      ctx.textBaseline = "top";
+
+      const maxWidth = canvas.width - 40;
+      const lineHeight = 40;
+      let x = 20;
+      let y = 20;
+
+      // 簡單換行邏輯
+      const lines = text.split('\n');
+      for (const line of lines) {
+        let currentLine = '';
+        for (const char of line) {
+          const testLine = currentLine + char;
+          const metrics = ctx.measureText(testLine);
+          if (metrics.width > maxWidth) {
+            ctx.fillText(currentLine, x, y);
+            y += lineHeight;
+            currentLine = char;
+          } else {
+            currentLine = testLine;
+          }
+        }
+        ctx.fillText(currentLine, x, y);
+        y += lineHeight;
+      }
+    }
+
+    // 呼叫 MyMemory 免費翻譯 API
+    async function translateText(text, target) {
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=auto|${target}`;
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        return data.responseData.translatedText;
+      } catch (e) {
+        return text; // 失敗就回傳原文
+      }
+    }
+
+    // 按鈕事件：OCR + 翻譯 + 手寫圖片生成
+    processBtn.addEventListener('click', async () => {
+      if (!imgInp.files.length) {
+        alert("請先上傳圖片");
+        return;
+      }
+      resultText.textContent = "辨識中，請稍候...";
+      clearCanvas();
+
+      const file = imgInp.files[0];
+      try {
+        // OCR 辨識，加入韓文語言包 kor
+        const { data: { text } } = await Tesseract.recognize(file, 'eng+chi_tra+kor', {
+          logger: m => console.log(m)
+        });
+        resultText.textContent = "OCR 辨識結果:\n" + text.trim();
+
+        // 翻譯
+        const target = targetLang.value;
+        if (target !== 'auto' && target !== 'eng') {
+          const translated = await translateText(text.trim(), target);
+          resultText.textContent += `\n\n翻譯結果 (${target}):\n` + translated;
+
+          // 生成手寫圖片
+          drawHandwriting(translated);
+        } else {
+          // 不翻譯直接生成
+          drawHandwriting(text.trim());
+        }
+      } catch (err) {
+        resultText.textContent = "辨識失敗，請重試。\n" + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
