@@ -2,16 +2,17 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>親筆信 AI 轉寫與手寫生成（含韓文）</title>
+  <title>親筆信 AI 轉寫與手寫生成</title>
   <style>
     body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; }
     #preview { max-width: 100%; margin-top: 10px; }
     #handwritingCanvas { border: 1px solid #ccc; margin-top: 20px; }
     #resultText { white-space: pre-wrap; background: #f9f9f9; padding: 10px; border: 1px solid #ddd; margin-top: 10px; }
+    button { margin-top: 10px; }
   </style>
 </head>
 <body>
-  <h1>親筆信 AI 轉寫與手寫生成（含韓文）</h1>
+  <h1>親筆信 AI 轉寫與手寫生成</h1>
 
   <label>拍照或上傳親筆信圖片：</label><br />
   <input type="file" id="imgInp" accept="image/*" capture="environment" />
@@ -31,6 +32,7 @@
   <br /><br />
 
   <button id="processBtn">開始轉寫與翻譯</button>
+  <button id="downloadBtn" disabled>下載手寫圖片</button>
 
   <h3>辨識文字（OCR）結果：</h3>
   <pre id="resultText">尚未辨識</pre>
@@ -47,6 +49,7 @@
     const resultText = document.getElementById('resultText');
     const targetLang = document.getElementById('targetLang');
     const processBtn = document.getElementById('processBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
     const canvas = document.getElementById('handwritingCanvas');
     const ctx = canvas.getContext('2d');
 
@@ -60,19 +63,21 @@
         preview.style.display = 'block';
       };
       reader.readAsDataURL(file);
+      // 每次換圖，禁用下載按鈕直到重新生成圖片
+      downloadBtn.disabled = true;
     });
 
-    // 簡易手寫風格字體設定，系統字體包含韓文字體
+    // 手寫字體設定，包含韓文字體
     const handwritingFont = "30px 'Segoe Script', 'Comic Sans MS', cursive, 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo'";
 
-    // 清除 Canvas
+    // 清除 Canvas 並填白底
     function clearCanvas() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    // 在 Canvas 上用手寫風格字體繪製文字
+    // 在 Canvas 上用手寫風格字體繪製文字，簡單換行
     function drawHandwriting(text) {
       clearCanvas();
       ctx.fillStyle = "#222";
@@ -84,7 +89,6 @@
       let x = 20;
       let y = 20;
 
-      // 簡單換行邏輯
       const lines = text.split('\n');
       for (const line of lines) {
         let currentLine = '';
@@ -116,7 +120,7 @@
       }
     }
 
-    // 按鈕事件：OCR + 翻譯 + 手寫圖片生成
+    // 轉寫與翻譯按鈕事件
     processBtn.addEventListener('click', async () => {
       if (!imgInp.files.length) {
         alert("請先上傳圖片");
@@ -124,6 +128,7 @@
       }
       resultText.textContent = "辨識中，請稍候...";
       clearCanvas();
+      downloadBtn.disabled = true;
 
       const file = imgInp.files[0];
       try {
@@ -145,9 +150,20 @@
           // 不翻譯直接生成
           drawHandwriting(text.trim());
         }
+        // 啟用下載按鈕
+        downloadBtn.disabled = false;
       } catch (err) {
         resultText.textContent = "辨識失敗，請重試。\n" + err.message;
       }
+    });
+
+    // 下載圖片按鈕事件
+    downloadBtn.addEventListener('click', () => {
+      const imageURL = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = imageURL;
+      link.download = '親筆信_手寫圖片.png';
+      link.click();
     });
   </script>
 </body>
