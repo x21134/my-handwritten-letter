@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>親筆信翻譯文字工具</title>
+  <title>親筆信 OCR 清除原文覆蓋翻譯文字 - 修正版</title>
   <style>
     body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; }
     #preview { max-width: 100%; margin-top: 10px; display:none; }
@@ -12,7 +12,7 @@
   </style>
 </head>
 <body>
-  <h1>親筆信翻譯文字工具</h1>
+  <h1>親筆信 OCR 清除原文覆蓋翻譯文字 - 修正版</h1>
 
   <label>拍照或上傳親筆信圖片：</label><br />
   <input type="file" id="imgInp" accept="image/*" capture="environment" />
@@ -99,6 +99,7 @@
 
       ctx.fillStyle = "white"; // 用白色遮蓋原文字區域
       words.forEach(word => {
+        if (!word.bbox) return;
         const { x0, y0, x1, y1 } = word.bbox;
         const width = x1 - x0;
         const height = y1 - y0;
@@ -106,22 +107,21 @@
         ctx.fillRect(x0 - 2, y0 - 2, width + 4, height + 4);
       });
 
-      // 疊加翻譯文字（簡單以整段文字呈現，可依需求改成逐字或逐區塊）
+      // 疊加翻譯文字（簡單以整段文字呈現）
       ctx.fillStyle = "black";
       ctx.font = "30px 'Segoe Script', 'Comic Sans MS', cursive, 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo'";
       ctx.textBaseline = "top";
 
-      // 文字位置示範：從第一個文字區塊左上角開始繪製
       if(words.length > 0) {
-        const startX = words[0].bbox.x0;
-        const startY = words[0].bbox.y0;
+        const startX = words[0].bbox?.x0 || 20;
+        const startY = words[0].bbox?.y0 || 20;
         const maxWidth = canvas.width - startX - 20;
         const lineHeight = 40;
 
         let x = startX;
         let y = startY;
 
-        const lines = translatedText.split('\n');
+        const lines = typeof translatedText === "string" ? translatedText.split('\n') : [translatedText];
         for (const line of lines) {
           let currentLine = '';
           for (const char of line) {
@@ -138,6 +138,9 @@
           ctx.fillText(currentLine, x, y);
           y += lineHeight;
         }
+      } else {
+        // 若無字詞資料，從左上角繪製
+        ctx.fillText(translatedText, 20, 20);
       }
     }
 
@@ -160,8 +163,13 @@
           logger: m => console.log(m)
         });
 
-        const text = data.text.trim();
+        const text = data.text ? data.text.trim() : '';
         resultText.textContent = "OCR 辨識結果:\n" + text;
+
+        if (!text) {
+          resultText.textContent += "\n\n未辨識到文字，請換張圖片再試。";
+          return;
+        }
 
         // 翻譯
         const target = targetLang.value;
@@ -169,7 +177,7 @@
         resultText.textContent += `\n\n翻譯結果 (${target}):\n` + translated;
 
         // 清除原文字區域並覆蓋翻譯文字
-        clearAndDrawWords(data.words, translated);
+        clearAndDrawWords(data.words || [], translated);
 
         downloadBtn.disabled = false;
       } catch (err) {
